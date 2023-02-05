@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Thomas van Doornmalen <thomas.vandoornmalen@gmail.com>"]
 description = "Julia binding library for RustFFT"
-homepage = "https://github.com/Taaitaaiger/jlrs"
-repository = "https://github.com/Taaitaaiger/jlrs"
+homepage = "https://github.com/Taaitaaiger/rustfft-jl"
+repository = "https://github.com/Taaitaaiger/rustfft-jl"
 readme = "./README.md"
 keywords = ["Julia", "fft", "fourier", "transform", "ffi"]
 categories = ["api-bindings", "mathematics"]
@@ -25,4 +25,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rustfft = "6"
-jlrs = { version = "0.18", git = "https://github.com/Taaitaaiger/jlrs", rev = "b33c5753", features = ["ccall", "jlrs-derive", "no-link"] }
+jlrs = { version = "0.18", git = "https://github.com/Taaitaaiger/jlrs", rev = "c235b9", features = ["ccall", "jlrs-derive", "no-link"] }

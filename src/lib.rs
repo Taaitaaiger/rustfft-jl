@@ -82,7 +82,7 @@ where
                     &mut frame,
                     FftInstance {
                         instance: self.0.plan_fft_forward(len),
-                        _len: len,
+                        len,
                     },
                 );
                 let unrooted = frame.unrooted();
@@ -103,7 +103,7 @@ where
                     &mut frame,
                     FftInstance {
                         instance: self.0.plan_fft_inverse(len),
-                        _len: len,
+                        len,
                     },
                 );
                 let unrooted = frame.unrooted();
@@ -129,7 +129,7 @@ where
                             &mut frame,
                             FftInstance {
                                 instance: self.0.plan_fft_forward(len),
-                                _len: len,
+                                len,
                             },
                         );
                         Ok(
@@ -142,7 +142,7 @@ where
                             &mut frame,
                             FftInstance {
                                 instance: self.0.plan_fft_inverse(len),
-                                _len: len,
+                                len,
                             },
                         );
                         Ok(
@@ -164,7 +164,7 @@ where
 // and the `OpaqueType` trait can be trivially implemented for both aliases.
 struct FftInstance<T> {
     instance: Arc<dyn Fft<T>>,
-    _len: usize,
+    len: usize,
 }
 
 type FftInstance32 = FftInstance<f32>;
@@ -208,7 +208,7 @@ where
                 // - `buffer.len() % self.len() > 0`
                 // - `buffer.len() < self.len()`
                 let len = slice.len();
-                let fft_len = self._len;
+                let fft_len = self.len;
                 if len > fft_len || len % fft_len > 0 {
                     let err = RustResult::<Nothing>::jlrs_error(
                         frame.as_extended_target(),
@@ -252,14 +252,14 @@ julia_module! {
     `FftPlanner64`.")]
     in FftPlanner32 fn plan_fft_inverse(&mut self, len: usize) -> RustResultRet<FftInstance<f32>>;
 
-    #[doc("    plan_fft(planner, direction::Synbol, len::UInt)
+    #[doc("    plan_fft(planner, direction::Symbol, len::UInt)
     
     Plan either a forward or an inverse FFT of length `len`. Returns either an `FftInstance32` or 
     `FftInstance64` depending on the provided planner, which must be either an `FftPlanner32` or 
     `FftPlanner64`. The direction must be either `:forward` or `:inverse`")]
     in FftPlanner32 fn plan_fft(
-        &mut self, 
-        direction: Symbol, 
+        &mut self,
+        direction: Symbol,
         len: usize
     ) -> RustResultRet<FftInstance<f32>>;
 
@@ -276,7 +276,7 @@ julia_module! {
     a `Vector{Complex{Float64}}`, the width must match the that of the provided `instance`, its
     length must be an integer multiple the length of the `instance`.")]
     in FftInstance32 fn process(
-        &self, 
+        &self,
         buffer: TypedRankedArray<JuliaComplex<f32>, 1>
     ) -> RustResultRet<Nothing> as fft!;
 
@@ -290,8 +290,8 @@ julia_module! {
     in FftPlanner64 fn plan_fft_forward(&mut self, len: usize) -> RustResultRet<FftInstance<f64>>;
     in FftPlanner64 fn plan_fft_inverse(&mut self, len: usize) -> RustResultRet<FftInstance<f64>>;
     in FftPlanner64 fn plan_fft(
-        &mut self, 
-        direction: Symbol, 
+        &mut self,
+        direction: Symbol,
         len: usize
     ) -> RustResultRet<FftInstance<f64>>;
 
@@ -301,7 +301,7 @@ julia_module! {
     `Vector{Complex{Float64}}` data whose length is an integer multiple of the planned length.")]
     struct FftInstance64;
     in FftInstance64 fn process(
-        &self, 
+        &self,
         buffer: TypedRankedArray<JuliaComplex<f64>, 1>
     ) -> RustResultRet<Nothing> as fft!;
 }
