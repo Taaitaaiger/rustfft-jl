@@ -209,7 +209,7 @@ where
                 // - `buffer.len() < self.len()`
                 let len = slice.len();
                 let fft_len = self.len;
-                if len > fft_len || len % fft_len > 0 {
+                if len < fft_len || len % fft_len > 0 {
                     let err = RustResult::<Nothing>::jlrs_error(
                         frame.as_extended_target(),
                         JlrsError::exception("Invalid length"),
