@@ -25,4 +25,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rustfft = "6"
-jlrs = { version = "0.18", git = "https://github.com/Taaitaaiger/jlrs", rev = "c235b9", features = ["ccall", "jlrs-derive", "no-link"] }
+jlrs = { version = "0.18", git = "https://github.com/Taaitaaiger/jlrs", rev = "e88427", features = ["ccall", "jlrs-derive", "no-link"] }
