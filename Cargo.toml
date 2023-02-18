@@ -18,6 +18,7 @@ julia-1-7 = ["jlrs/julia-1-7"]
 julia-1-8 = ["jlrs/julia-1-8"]
 julia-1-9 = ["jlrs/julia-1-9"]
 julia-1-10 = ["jlrs/julia-1-10"]
+i686 = ["jlrs/i686"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
