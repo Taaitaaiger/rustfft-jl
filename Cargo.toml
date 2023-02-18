@@ -19,6 +19,7 @@ julia-1-8 = ["jlrs/julia-1-8"]
 julia-1-9 = ["jlrs/julia-1-9"]
 julia-1-10 = ["jlrs/julia-1-10"]
 i686 = ["jlrs/i686"]
+windows = ["jlrs/windows"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
@@ -26,4 +27,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rustfft = "6"
-jlrs = { version = "0.18", git = "https://github.com/Taaitaaiger/jlrs", rev = "076ff4", features = ["ccall", "jlrs-derive", "yggdrasil"] }
+jlrs = { version = "0.18", git = "https://github.com/Taaitaaiger/jlrs", rev = "3cddd1e", features = ["ccall", "jlrs-derive", "yggdrasil"] }
