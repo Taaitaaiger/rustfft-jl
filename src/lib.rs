@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use jlrs::{
+    ccall::AsyncCallback,
     convert::compatible::{Compatible, CompatibleCast},
     data::{
         layout::valid_layout::ValidField,
         managed::{
-            array::TypedRankedArray,
+            array::{TypedRankedArray, TypedRankedArrayUnbound},
             rust_result::{RustResult, RustResultRet},
-            value::typed::{TypedValue, TypedValueRet},
+            value::typed::{TypedValue, TypedValueRet, TypedValueUnbound},
         },
         types::{construct_type::ConstructType, foreign_type::OpaqueType},
     },
@@ -15,7 +16,10 @@ use jlrs::{
     prelude::*,
 };
 
-use rustfft::{num_complex, Fft, FftNum, FftPlanner as FftPlannerImp};
+use rustfft::{
+    num_complex::{self},
+    Fft, FftNum, FftPlanner as FftPlannerImp,
+};
 
 // Layout for `Base.Complex`, generated with Jlrs.Reflect:
 //
@@ -187,7 +191,7 @@ where
 
                 // Try to mutably track the buffer. Return a `BorrowError` if this fails.
                 let mut buffer = buffer.as_typed();
-                let mut tracked_buffer = match buffer.track_mut() {
+                let mut tracked_buffer = match buffer.track_exclusive() {
                     Ok(tracked_buffer) => tracked_buffer,
                     Err(_) => {
                         return RustResult::<Nothing>::borrow_error(
@@ -228,62 +232,83 @@ where
     }
 }
 
+fn process_async<T: FftNum + ValidField + Clone + ConstructType>(
+    instance: TypedValueUnbound<FftInstance<T>>,
+    data: TypedRankedArrayUnbound<JuliaComplex<T>, 1>,
+) -> JlrsResult<impl AsyncCallback<Nothing>>
+where
+    FftInstance<T>: OpaqueType,
+{
+    unsafe {
+        let instance_tracked = instance
+            .as_value()
+            .track_exclusive_unbound::<FftInstance<T>>()?;
+        let mut array_tracked = data.as_typed().track_exclusive_unbound()?;
+
+        Ok(move || {
+            let array_slice = array_tracked.as_mut_slice().compatible_cast_mut();
+            instance_tracked.instance.process(array_slice);
+            Ok(Nothing)
+        })
+    }
+}
+
 julia_module! {
     become rustfft_jl_init;
 
-    #[doc("   FftPlanner32
-    
-    A planner for forward and inverse FFTs of `Vector{Complex{Float32}}` data. A new planner can 
-    be created by calling the zero-argument constructor.")]
+    #[doc = "   FftPlanner32"]
+    #[doc = ""]
+    #[doc = "A planner for forward and inverse FFTs of `Vector{Complex{Float32}}` data. A new planner can"]
+    #[doc = "be created by calling the zero-argument constructor."]
     struct FftPlanner32;
     in FftPlanner32 fn new() -> TypedValueRet<FftPlanner32> as FftPlanner32;
 
-    #[doc("    plan_fft_forward(planner, len::UInt)
-    
-    Plan a forward FFT of length `len`. Returns either an `FftInstance32` or `FftInstance64`
-    depending on the provided planner, which must be either an `FftPlanner32` or 
-    `FftPlanner64`.")]
+    #[doc= "    plan_fft_forward(planner, len::UInt)"]
+    #[doc= ""]
+    #[doc = "Plan a forward FFT of length `len`. Returns either an `FftInstance32` or `FftInstance64`"]
+    #[doc = "depending on the provided planner, which must be either an `FftPlanner32` or "]
+    #[doc = "`FftPlanner64`."]
     in FftPlanner32 fn plan_fft_forward(&mut self, len: usize) -> RustResultRet<FftInstance<f32>>;
 
-    #[doc("    plan_fft_inverse(planner, len::UInt)
-    
-    Plan an inverse FFT of length `len`. Returns either an `FftInstance32` or `FftInstance64`
-    depending on the provided planner, which must be either an `FftPlanner32` or 
-    `FftPlanner64`.")]
+    #[doc = "    plan_fft_inverse(planner, len::UInt)"]
+    #[doc = ""]
+    #[doc = "Plan an inverse FFT of length `len`. Returns either an `FftInstance32` or `FftInstance64`"]
+    #[doc = "depending on the provided planner, which must be either an `FftPlanner32` or "]
+    #[doc = "`FftPlanner64`."]
     in FftPlanner32 fn plan_fft_inverse(&mut self, len: usize) -> RustResultRet<FftInstance<f32>>;
 
-    #[doc("    plan_fft(planner, direction::Symbol, len::UInt)
-    
-    Plan either a forward or an inverse FFT of length `len`. Returns either an `FftInstance32` or 
-    `FftInstance64` depending on the provided planner, which must be either an `FftPlanner32` or 
-    `FftPlanner64`. The direction must be either `:forward` or `:inverse`")]
+    #[doc= "    plan_fft(planner, direction::Symbol, len::UInt)"]
+    #[doc= ""]
+    #[doc = "Plan either a forward or an inverse FFT of length `len`. Returns either an `FftInstance32` or"]
+    #[doc = "`FftInstance64` depending on the provided planner, which must be either an `FftPlanner32` or"]
+    #[doc = "`FftPlanner64`. The direction must be either `:forward` or `:inverse`"]
     in FftPlanner32 fn plan_fft(
         &mut self,
         direction: Symbol,
         len: usize
     ) -> RustResultRet<FftInstance<f32>>;
 
-    #[doc("   FftInstance32
-    
-    A planned FFT instance that can compute either forward or inverse FFTs of 
-    `Vector{Complex{Float32}}` data whose length is an integer multiple of the planned length.")]
+    #[doc = "   FftInstance32"]
+    #[doc = ""]
+    #[doc = "A planned FFT instance that can compute either forward or inverse FFTs of"]
+    #[doc = "`Vector{Complex{Float32}}` data whose length is an integer multiple of the planned length."]
     struct FftInstance32;
 
-    #[doc("   fft!(instance, data)
-    
-    Computes the forward or inverse FFT of the data in-place. `instance` must be either a 
-    `FftInstance32` or a `FftInstance64`. `data` must be either a `Vector{Complex{Float32}}` or
-    a `Vector{Complex{Float64}}`, the width must match the that of the provided `instance`, its
-    length must be an integer multiple the length of the `instance`.")]
+    #[doc = "   fft!(instance, data)"]
+    #[doc = ""]
+    #[doc = "Computes the forward or inverse FFT of the data in-place. `instance` must be either a"]
+    #[doc = "`FftInstance32` or a `FftInstance64`. `data` must be either a `Vector{Complex{Float32}}` or"]
+    #[doc = "a `Vector{Complex{Float64}}`, the width must match the that of the provided `instance`, its"]
+    #[doc = "length must be an integer multiple the length of the `instance`."]
     in FftInstance32 fn process(
         &self,
         buffer: TypedRankedArray<JuliaComplex<f32>, 1>
     ) -> RustResultRet<Nothing> as fft!;
 
-    #[doc("   FftPlanner64
-    
-    A planner for forward and inverse FFTs of `Vector{Complex{Float64}}` data. A new planner can 
-    be created by calling the zero-argument constructor.")]
+    #[doc = "   FftPlanner64"]
+    #[doc = ""]
+    #[doc = "A planner for forward and inverse FFTs of `Vector{Complex{Float64}}` data. A new planner can"]
+    #[doc = "be created by calling the zero-argument constructor."]
     struct FftPlanner64;
     in FftPlanner64 fn new() -> TypedValueRet<FftPlanner64> as FftPlanner64;
 
@@ -295,13 +320,27 @@ julia_module! {
         len: usize
     ) -> RustResultRet<FftInstance<f64>>;
 
-    #[doc("   FftInstance64
-    
-    A planned FFT instance that can compute either forward or inverse FFTs of 
-    `Vector{Complex{Float64}}` data whose length is an integer multiple of the planned length.")]
+    #[doc = "   FftInstance64"]
+    #[doc = ""]
+    #[doc = "A planned FFT instance that can compute either forward or inverse FFTs of "]
+    #[doc = "`Vector{Complex{Float64}}` data whose length is an integer multiple of the planned length."]
     struct FftInstance64;
     in FftInstance64 fn process(
         &self,
         buffer: TypedRankedArray<JuliaComplex<f64>, 1>
     ) -> RustResultRet<Nothing> as fft!;
+
+    #[doc = "   fft_async!"]
+    #[doc = ""]
+    #[doc = "Computes the forward or inverse FFT of the data in-place, the transform is computed on a background"]
+    #[doc = "thread. See RustFFT.fft! for more info."]
+    async fn process_async(
+        instance: TypedValueUnbound<FftInstance<f32>>,
+        data: TypedRankedArrayUnbound<JuliaComplex<f32>, 1>,
+    ) -> JlrsResult<impl AsyncCallback<Nothing>> as fft_async!;
+
+    async fn process_async(
+        instance: TypedValueUnbound<FftInstance<f64>>,
+        data: TypedRankedArrayUnbound<JuliaComplex<f64>, 1>,
+    ) -> JlrsResult<impl AsyncCallback<Nothing>> as fft_async!;
 }
