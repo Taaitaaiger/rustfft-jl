@@ -256,7 +256,7 @@ where
 julia_module! {
     become rustfft_jl_init;
 
-    #[doc = "   FftPlanner32"]
+    #[doc = "    FftPlanner32"]
     #[doc = ""]
     #[doc = "A planner for forward and inverse FFTs of `Vector{Complex{Float32}}` data. A new planner can"]
     #[doc = "be created by calling the zero-argument constructor."]
@@ -288,13 +288,13 @@ julia_module! {
         len: usize
     ) -> RustResultRet<FftInstance<f32>>;
 
-    #[doc = "   FftInstance32"]
+    #[doc = "    FftInstance32"]
     #[doc = ""]
     #[doc = "A planned FFT instance that can compute either forward or inverse FFTs of"]
     #[doc = "`Vector{Complex{Float32}}` data whose length is an integer multiple of the planned length."]
     struct FftInstance32;
 
-    #[doc = "   fft!(instance, data)"]
+    #[doc = "    fft!(instance, data)"]
     #[doc = ""]
     #[doc = "Computes the forward or inverse FFT of the data in-place. `instance` must be either a"]
     #[doc = "`FftInstance32` or a `FftInstance64`. `data` must be either a `Vector{Complex{Float32}}` or"]
@@ -305,7 +305,7 @@ julia_module! {
         buffer: TypedRankedArray<JuliaComplex<f32>, 1>
     ) -> RustResultRet<Nothing> as fft!;
 
-    #[doc = "   FftPlanner64"]
+    #[doc = "    FftPlanner64"]
     #[doc = ""]
     #[doc = "A planner for forward and inverse FFTs of `Vector{Complex{Float64}}` data. A new planner can"]
     #[doc = "be created by calling the zero-argument constructor."]
@@ -320,7 +320,7 @@ julia_module! {
         len: usize
     ) -> RustResultRet<FftInstance<f64>>;
 
-    #[doc = "   FftInstance64"]
+    #[doc = "    FftInstance64"]
     #[doc = ""]
     #[doc = "A planned FFT instance that can compute either forward or inverse FFTs of "]
     #[doc = "`Vector{Complex{Float64}}` data whose length is an integer multiple of the planned length."]
@@ -330,10 +330,11 @@ julia_module! {
         buffer: TypedRankedArray<JuliaComplex<f64>, 1>
     ) -> RustResultRet<Nothing> as fft!;
 
-    #[doc = "   fft_async!"]
+    #[doc = "    fft_async!(instance, data)"]
     #[doc = ""]
-    #[doc = "Computes the forward or inverse FFT of the data in-place, the transform is computed on a background"]
-    #[doc = "thread. See RustFFT.fft! for more info."]
+    #[doc = "Computes the forward or inverse FFT of the data in-place. The transform is computed by a background"]
+    #[doc = "thread, this function waits for that computation to be finished before returning. See RustFFT.fft!"]
+    #[doc = "for more info."]
     async fn process_async(
         instance: TypedValueUnbound<FftInstance<f32>>,
         data: TypedRankedArrayUnbound<JuliaComplex<f32>, 1>,
