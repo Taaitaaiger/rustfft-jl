@@ -12,8 +12,8 @@ categories = ["api-bindings", "mathematics"]
 license = "MIT"
 rust-version = "1.65"
 
-[profile.release]
-panic = "abort"
+#[profile.release]
+#panic = "abort"
 
 [features]
 julia-1-6 = ["jlrs/julia-1-6"]
