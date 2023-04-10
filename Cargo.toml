@@ -12,9 +12,6 @@ categories = ["api-bindings", "mathematics"]
 license = "MIT"
 rust-version = "1.65"
 
-#[profile.release]
-#panic = "abort"
-
 [features]
 julia-1-6 = ["jlrs/julia-1-6"]
 julia-1-7 = ["jlrs/julia-1-7"]
@@ -32,4 +29,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rustfft = "6"
-jlrs = { version = "0.18", git = "https://github.com/Taaitaaiger/jlrs", rev = "1285620", features = ["ccall", "jlrs-derive", "uv", "no-link"] }
+jlrs = { version = "0.18", git = "https://github.com/Taaitaaiger/jlrs", rev = "23f58a2", features = ["ccall", "jlrs-derive", "uv", "no-link"] }
