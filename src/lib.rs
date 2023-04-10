@@ -1,5 +1,11 @@
 use std::sync::Arc;
 
+
+#[cfg(all(target_arch = "x86", target_os = "windows", target_env = "gnu"))]
+#[allow(unused)]
+#[no_mangle]
+unsafe extern "C" fn _Unwind_Resume() {}
+
 use jlrs::{
     ccall::AsyncCallback,
     convert::compatible::{Compatible, CompatibleCast},
