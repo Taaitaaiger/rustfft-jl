@@ -1,3 +1,6 @@
+[registries.crates-io]
+protocol = "sparse"
+
 [build]
 rustflags = ["-C", "panic=abort"]
 
