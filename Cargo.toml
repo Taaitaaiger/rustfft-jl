@@ -6,32 +6,35 @@ authors = ["Thomas van Doornmalen <thomas.vandoornmalen@gmail.com>"]
 description = "Julia binding library for RustFFT"
 homepage = "https://github.com/Taaitaaiger/rustfft-jl"
 repository = "https://github.com/Taaitaaiger/rustfft-jl"
-readme = "./README.md"
-keywords = ["Julia", "fft", "fourier", "transform", "ffi"]
-categories = ["api-bindings", "mathematics"]
 license = "MIT"
 rust-version = "1.65"
 
 [features]
+# Because this library depends on jlrs it must declare the version of Julia it's compatible with
+# by enabling the associated version feature. The features are "reexported", requiring one to be
+# set when building. For example, to compile a library that's compatible with Julia 1.8, use
+# `cargo build --features=julia-1-8`.
 julia-1-6 = ["jlrs/julia-1-6"]
 julia-1-7 = ["jlrs/julia-1-7"]
 julia-1-8 = ["jlrs/julia-1-8"]
 julia-1-9 = ["jlrs/julia-1-9"]
 julia-1-10 = ["jlrs/julia-1-10"]
 
-# This crate can be compiled with BinaryBuilder and distributed through Yggdrasil. The recipe can 
-# be found at:
+# This libraray can be compiled with BinaryBuilder and distributed through Yggdrasil. The recipe 
+# can be found at:
 # https://github.com/JuliaPackaging/Yggdrasil/tree/master/R/rustfft_jl/build_tarballs.jl
 yggdrasil = ["jlrs/yggdrasil"]
 
+# Setting these flags is required when cross-compiling from other platforms. When BinaryBuilder is
+# used, only the yggdrasil feature needs to be enabled.
 i686 = ["jlrs/i686"]
 windows = ["jlrs/windows"]
 macos = ["jlrs/macos"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
+# We only want to build a cdylib, i.e. a dynamic system library.
 crate-type = ["cdylib"]
 
 [dependencies]
 rustfft = "6"
-jlrs = { version = "0.18", git = "https://github.com/Taaitaaiger/jlrs", rev = "1521bf4", features = ["ccall", "jlrs-derive", "uv"] }
+jlrs = { version = "0.18", git = "https://github.com/Taaitaaiger/jlrs", rev = "542b9a4", features = ["ccall", "jlrs-derive", "uv"] }

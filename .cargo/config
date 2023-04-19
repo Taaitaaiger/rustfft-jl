@@ -1,9 +1,12 @@
 [registries.crates-io]
 protocol = "sparse"
 
+# abort on panic because panicking across languages is unsound.
 [build]
 rustflags = ["-C", "panic=abort"]
 
+# musl targets require -crt-static, panic=abort must be set again because this overrides the 
+# rustflags set for the build key.
 [target.aarch64-unknown-linux-musl]
 rustflags = ["-C", "panic=abort", "-C", "target-feature=-crt-static"]
 
