@@ -11,8 +11,8 @@ rust-version = "1.65"
 
 [features]
 # Because this library depends on jlrs it must declare the version of Julia it's compatible with
-# by enabling the associated version feature. The features are "reexported", requiring one to be
-# set when building. For example, to compile a library that's compatible with Julia 1.8, use
+# by enabling a version feature. These features are "reexported", requiring one to be set at buld
+# time. For example, to compile a library that's compatible with Julia 1.8, use 
 # `cargo build --features=julia-1-8`.
 julia-1-6 = ["jlrs/julia-1-6"]
 julia-1-7 = ["jlrs/julia-1-7"]
@@ -20,16 +20,19 @@ julia-1-8 = ["jlrs/julia-1-8"]
 julia-1-9 = ["jlrs/julia-1-9"]
 julia-1-10 = ["jlrs/julia-1-10"]
 
-# This libraray can be compiled with BinaryBuilder and distributed through Yggdrasil. The recipe 
-# can be found at:
+# This library can be compiled with BinaryBuilder. The recipe can be found here:
 # https://github.com/JuliaPackaging/Yggdrasil/tree/master/R/rustfft_jl/build_tarballs.jl
+#
+# This recipe does two things to build this library:
+#
+# 1. determine the version feature that needs to be enabled
+# 2. build the library with the yggdrasil feature and version feature from step 1
 yggdrasil = ["jlrs/yggdrasil"]
 
 # Setting these flags is required when cross-compiling from other platforms. When BinaryBuilder is
 # used, only the yggdrasil feature needs to be enabled.
 i686 = ["jlrs/i686"]
 windows = ["jlrs/windows"]
-macos = ["jlrs/macos"]
 
 [lib]
 # We only want to build a cdylib, i.e. a dynamic system library.
@@ -37,4 +40,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rustfft = "6"
-jlrs = { version = "0.18", git = "https://github.com/Taaitaaiger/jlrs", rev = "542b9a4", features = ["ccall", "jlrs-derive", "uv"] }
+jlrs = { version = "0.18", git = "https://github.com/Taaitaaiger/jlrs", rev = "599d322", features = ["ccall", "jlrs-derive", "uv"] }
