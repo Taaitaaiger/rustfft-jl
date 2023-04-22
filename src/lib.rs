@@ -10,7 +10,7 @@
 //! the [RustFFT package].
 //!
 //! [here]: https://docs.binarybuilder.org/stable/
-//! [in the Yggdrasil repository]: https://github.com/JuliaPackaging/Yggdrasil/blob/master/R/rustfft_jl/build_tarballs.jl
+//! [in the Yggdrasil repository]: https://github.com/JuliaPackaging/Yggdrasil/blob/master/R/rustfft/build_tarballs.jl
 //! [RustFFT package]: https://github.com/Taaitaaiger/RustFFT.jl
 
 use std::sync::Arc;

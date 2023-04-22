@@ -21,7 +21,7 @@ julia-1-9 = ["jlrs/julia-1-9"]
 julia-1-10 = ["jlrs/julia-1-10"]
 
 # This library can be compiled with BinaryBuilder. The recipe can be found here:
-# https://github.com/JuliaPackaging/Yggdrasil/tree/master/R/rustfft_jl/build_tarballs.jl
+# https://github.com/JuliaPackaging/Yggdrasil/tree/master/R/rustfft/build_tarballs.jl
 #
 # This recipe does two things to build this library:
 #
@@ -40,4 +40,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rustfft = "6"
-jlrs = { version = "0.18.0-beta.1", features = ["ccall", "jlrs-derive", "uv"] }
+jlrs = { version = "0.18.0-beta.2", features = ["ccall", "jlrs-derive", "uv"] }
