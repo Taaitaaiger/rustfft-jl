@@ -1,6 +1,6 @@
 [package]
 name = "rustfft-jl"
-version = "0.2.3"
+version = "0.3.0"
 edition = "2021"
 authors = ["Thomas van Doornmalen <thomas.vandoornmalen@gmail.com>"]
 description = "Julia binding library for RustFFT"
@@ -12,13 +12,14 @@ rust-version = "1.65"
 [features]
 # Because this library depends on jlrs it must declare the version of Julia it's compatible with
 # by enabling a version feature. These features are "reexported", requiring one to be set at buld
-# time. For example, to compile a library that's compatible with Julia 1.8, use 
+# time. For example, to compile a library that's compatible with Julia 1.8, use
 # `cargo build --features=julia-1-8`.
 julia-1-6 = ["jlrs/julia-1-6"]
 julia-1-7 = ["jlrs/julia-1-7"]
 julia-1-8 = ["jlrs/julia-1-8"]
 julia-1-9 = ["jlrs/julia-1-9"]
 julia-1-10 = ["jlrs/julia-1-10"]
+julia-1-11 = ["jlrs/julia-1-11"]
 
 # This library can be compiled with BinaryBuilder. The recipe can be found here:
 # https://github.com/JuliaPackaging/Yggdrasil/tree/master/R/rustfft/build_tarballs.jl
@@ -34,10 +35,28 @@ yggdrasil = ["jlrs/yggdrasil"]
 i686 = ["jlrs/i686"]
 windows = ["jlrs/windows"]
 
+# This feature must be enabled to run the benchmarks.
+rt = ["jlrs/sync-rt"]
+
 [lib]
-# We only want to build a cdylib, i.e. a dynamic system library.
-crate-type = ["cdylib"]
+# We build both a cdylib and an rlib, we need to enable the latter for benchmarking.
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 rustfft = "6"
-jlrs = { version = "0.18", features = ["ccall", "jlrs-derive", "uv"] }
+jlrs = { version = "0.19", features = ["ccall", "jlrs-derive", "uv"] }
+
+[target.'cfg(unix)'.dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+pprof = { version = "0.12", features = ["flamegraph", "criterion"] }
+
+[profile.release]
+panic = "abort"
+
+[profile.bench]
+debug = true
+panic = 'unwind'
+
+[[bench]]
+name = "fft"
+harness = false
