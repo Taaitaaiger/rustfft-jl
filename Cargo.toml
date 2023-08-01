@@ -1,6 +1,6 @@
 [package]
 name = "rustfft-jl"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 authors = ["Thomas van Doornmalen <thomas.vandoornmalen@gmail.com>"]
 description = "Julia binding library for RustFFT"
