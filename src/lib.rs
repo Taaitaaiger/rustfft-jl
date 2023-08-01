@@ -23,9 +23,13 @@ use jlrs::{
             array::TypedRankedArray,
             value::typed::{TypedValue, TypedValueRet},
         },
-        types::{construct_type::ConstructType, foreign_type::OpaqueType},
+        types::{
+            construct_type::ConstructType,
+            foreign_type::{ParametricBase, ParametricVariant},
+        },
     },
     error::JlrsError,
+    impl_type_parameters, impl_variant_parameters,
     prelude::*,
 };
 
@@ -63,31 +67,41 @@ pub struct JuliaComplex<T> {
     pub im: T,
 }
 
-// Safety: RustFFT uses `num_complex::Complex` which is compatible with `JuliaComplex`, both are
-// repr(C) and have the same field layout.
+// RustFFT uses the floating-point number type as a generic, in Julia we want the full type. This
+// trait connects the complex number type to its inner type.
+pub trait IsComplex: 'static + Send + Sync {
+    type Inner: FftNum;
+}
+
+impl<T: FftNum> IsComplex for JuliaComplex<T> {
+    type Inner = T;
+}
+
+// Safety: `num_complex::Complex` which is compatible with `JuliaComplex`, both are repr(C) and
+// have the same field layout.
 unsafe impl<T> Compatible<num_complex::Complex<T>> for JuliaComplex<T> where T: ValidField + Clone {}
 
-/// A type that wraps an `FftPlanner` from RustFFT so the `OpaqueType` trait can be implemented.
-pub struct FftPlanner<T: FftNum>(FftPlannerImp<T>);
+/// Wrapper around `FftPlanner` from RustFFT.
+pub struct FftPlanner<T: IsComplex>(FftPlannerImp<T::Inner>);
 
-// RustFFT supports 32 and 64 bit floating point numbers, so we'll create aliases for both types
-// and implement `OpaqueType` for them. Implementing this trait is safe because the planner
-// contains no references to Julia data.
+unsafe impl<T: IsComplex> ParametricBase for FftPlanner<T> {
+    type Key = FftPlanner<JuliaComplex<f32>>;
+    impl_type_parameters!('T');
+}
 
-/// A planner for 32-bits complex numbers.
-pub type FftPlanner32 = FftPlanner<f32>;
-unsafe impl OpaqueType for FftPlanner32 {}
-
-/// A planner for 64-bits complex numbers.
-pub type FftPlanner64 = FftPlanner<f64>;
-unsafe impl OpaqueType for FftPlanner64 {}
-
-impl<T: FftNum> FftPlanner<T>
+unsafe impl<T> ParametricVariant for FftPlanner<T>
 where
-    Self: OpaqueType,
-    FftInstance<T>: OpaqueType,
+    T: IsComplex + ConstructType,
 {
-    /// Create a new instance of `FftPlanner`,
+    impl_variant_parameters!(T);
+}
+
+impl<T: IsComplex> FftPlanner<T>
+where
+    Self: ParametricVariant,
+    FftInstance<T>: ParametricVariant,
+{
+    /// Creates a new instance of `FftPlanner`,
     #[inline]
     pub fn new() -> TypedValueRet<Self> {
         // Safety: this function is called through `ccall`, the leaked data is returned
@@ -100,11 +114,7 @@ where
         }
     }
 
-    /// Return an `FftInstance` that computes forward FFTs of size `len`.
-    ///
-    /// This method takes a mutable reference to `self`, it must return a `RustResult` because this
-    /// mutable borrow is automatically tracked to prevent aliasing exclusive references. If the
-    /// instance is already borrowed, a `BorrowError` is thrown.
+    /// Returns an `FftInstance` that computes forward FFTs of size `len`.
     #[inline]
     pub fn plan_fft_forward(&mut self, len: usize) -> TypedValueRet<FftInstance<T>> {
         // Safety: this function is called through `ccall`, no other instances are created, and
@@ -112,15 +122,13 @@ where
         unsafe {
             CCall::stackless_invoke(|unrooted| {
                 let instance = self.0.plan_fft_forward(len);
-                let instance = FftInstance { instance, len };
+                let instance = FftInstance(instance);
                 TypedValue::new(unrooted, instance).leak()
             })
         }
     }
 
-    /// Return an `FftInstance` that computes inverse FFTs of size `len`.
-    ///
-    /// The same further comments as those provided for `plan_fft_forward` apply.
+    /// Returns an `FftInstance` that computes inverse FFTs of size `len`.
     #[inline]
     pub fn plan_fft_inverse(&mut self, len: usize) -> TypedValueRet<FftInstance<T>> {
         // Safety: this function is called through `ccall`, no other instances are created, and
@@ -128,57 +136,38 @@ where
         unsafe {
             CCall::stackless_invoke(|unrooted| {
                 let instance = self.0.plan_fft_inverse(len);
-                let instance = FftInstance { instance, len };
+                let instance = FftInstance(instance);
                 TypedValue::new(unrooted, instance).leak()
             })
         }
     }
-
-    /// Return an `FftInstance` that computes either  forward or inverse FFTs of size `len`.
-    ///
-    /// The second argument, `direction`, must be either `:forward` or `:inverse`. Oherwise an
-    /// `ErrorException` is thrown. The same further comments as those provided for
-    /// `plan_fft_forward` apply.
-    #[inline]
-    pub fn plan_fft(
-        &mut self,
-        direction: Symbol,
-        len: usize,
-    ) -> JlrsResult<TypedValueRet<FftInstance<T>>> {
-        match direction.as_str()? {
-            "forward" => Ok(self.plan_fft_forward(len)),
-            "inverse" => Ok(self.plan_fft_inverse(len)),
-            _ => Err(JlrsError::exception(
-                "direction must be :forward or :inverse",
-            ))?,
-        }
-    }
 }
 
-/// An instance of [`Fft`]
-///
-/// The methods of [`FftPlanner`] return  instances of this type, which can be used to actually
-/// compute the FFT in the given direction. Like `FftPlanner` a newtype and aliases are defined,
-/// and the `OpaqueType` trait can be trivially implemented for both aliases.
-pub struct FftInstance<T> {
-    instance: Arc<dyn Fft<T>>,
-    len: usize,
+pub struct FftInstance<T: IsComplex>(Arc<dyn Fft<T::Inner>>);
+unsafe impl<T: IsComplex> ParametricBase for FftInstance<T> {
+    type Key = FftInstance<JuliaComplex<f32>>;
+    impl_type_parameters!('T');
 }
 
-/// An alias for instances of [`FftInstance`] that support 32-bits complex numbers.
-pub type FftInstance32 = FftInstance<f32>;
-unsafe impl OpaqueType for FftInstance32 {}
-
-/// An alias for instances of [`FftInstance`] that support 64-bits complex numbers.
-pub type FftInstance64 = FftInstance<f64>;
-unsafe impl OpaqueType for FftInstance64 {}
+unsafe impl<T> ParametricVariant for FftInstance<T>
+where
+    T: IsComplex + ConstructType,
+{
+    impl_variant_parameters!(T);
+}
 
 impl<T> FftInstance<T>
 where
-    T: FftNum + ValidField + Clone + ConstructType,
-    Self: OpaqueType,
+    T: IsComplex + ValidField + Clone + ConstructType + Compatible<num_complex::Complex<T::Inner>>,
+    Self: ParametricVariant,
 {
-    /// Calcalate the forward or inverse FFT of `buffer`.
+    /// Returns the length required by this instance.
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Calcalates the forward or inverse FFT of `buffer`.
     ///
     /// If the data is already borrowed or the size requirements haven't been met an error is
     /// returned.
@@ -187,7 +176,7 @@ where
     /// another thread while this function is called. The buffer is tracked, but that only
     /// guarantees Rust functions are aware the data is mutably borrowed.
     #[inline]
-    pub unsafe fn process(&self, buffer: TypedRankedArray<JuliaComplex<T>, 1>) -> JlrsResult<()> {
+    pub unsafe fn process(&self, buffer: TypedRankedArray<T, 1>) -> JlrsResult<()> {
         let mut arr = buffer.as_typed();
         // Try to mutably track the buffer. Return a `BorrowError` if this fails.
         let mut tracked_buffer = arr.track_exclusive()?;
@@ -196,237 +185,176 @@ where
         // `num_complex::Complex`.
         let slice = tracked_buffer
             .as_mut_slice()
-            .compatible_cast_mut::<num_complex::Complex<T>>();
+            .compatible_cast_mut::<num_complex::Complex<T::Inner>>();
 
         // https://docs.rs/rustfft/6.1.0/src/rustfft/lib.rs.html#183
         // This method panics if:
         // - `buffer.len() % self.len() > 0`
         // - `buffer.len() < self.len()`
         let len = slice.len();
-        let fft_len = self.len;
+        let fft_len = self.len();
         if len < fft_len || len % fft_len > 0 {
             Err(JlrsError::exception("Invalid length"))?;
         }
 
         // Transform the slice to its (inverse) FFT
-        self.instance.process(slice);
+        self.0.process(slice);
 
         // Success!
         Ok(())
     }
 
-    /// Calcalate the forward or inverse FFT of `buffer` without tracking the array.
+    /// Calcalates the forward or inverse FFT of `buffer`.
     ///
     /// If the size requirements haven't been met an error is returned.
     ///
     /// Safety: the contents of `buffer` are mutated, you must guarantee it isn't accessed from
-    /// another thread while this function is called. The buffer isn't tracked, so other Rust
-    /// functions are also unaware of this mutable borrow.
+    /// another thread while this function is called. The buffer is not tracked.
     #[inline]
-    pub unsafe fn process_untracked(
-        &self,
-        buffer: TypedRankedArray<JuliaComplex<T>, 1>,
-    ) -> JlrsResult<()> {
+    pub unsafe fn process_untracked(&self, buffer: TypedRankedArray<T, 1>) -> JlrsResult<()> {
         let mut buffer = buffer.as_typed();
         let mut accessor = buffer.bits_data_mut().unwrap_unchecked();
         let slice = accessor
             .as_mut_slice()
-            .compatible_cast_mut::<num_complex::Complex<T>>();
+            .compatible_cast_mut::<num_complex::Complex<T::Inner>>();
 
         // https://docs.rs/rustfft/6.1.0/src/rustfft/lib.rs.html#183
         // This method panics if:
         // - `buffer.len() % self.len() > 0`
         // - `buffer.len() < self.len()`
         let len = slice.len();
-        let fft_len = self.len;
+        let fft_len = self.len();
         if len < fft_len || len % fft_len > 0 {
             Err(JlrsError::exception("Invalid length"))?;
         }
 
         // Transform the slice to its (inverse) FFT
-        self.instance.process(slice);
+        self.0.process(slice);
 
         // Success!
         Ok(())
     }
 
-    /// Calcalate the forward or inverse FFT of `buffer` without checking any requirements.
+    /// Calcalates the forward or inverse FFT of `buffer`.
     ///
-    /// If the size requirements aren't met, the function will panic. In practice this means the
-    /// process aborts.
+    /// The size requirements are not checked.
     ///
     /// Safety: the contents of `buffer` are mutated, you must guarantee it isn't accessed from
-    /// another thread while this function is called. The buffer isn't tracked, so other Rust
-    /// functions are also unaware of this mutable borrow.
+    /// another thread while this function is called. The buffer is not tracked.
     #[inline]
-    pub unsafe fn process_unchecked(&self, buffer: TypedRankedArray<JuliaComplex<T>, 1>) {
+    pub unsafe fn process_unchecked(&self, buffer: TypedRankedArray<T, 1>) {
         let mut buffer = buffer.as_typed();
         let mut accessor = buffer.bits_data_mut().unwrap_unchecked();
         let slice = accessor
             .as_mut_slice()
-            .compatible_cast_mut::<num_complex::Complex<T>>();
-        self.instance.process(slice);
+            .compatible_cast_mut::<num_complex::Complex<T::Inner>>();
+        self.0.process(slice);
     }
 }
 
 julia_module! {
     become rustfft_jl_init;
 
+    for T in [JuliaComplex<f32>, JuliaComplex<f64>] {
+        #[doc = "    FftPlanner{T}"]
+        #[doc = ""]
+        #[doc = "A planner for forward and inverse FFTs of `Vector{T}`, `T` must be `ComplexF32`"]
+        #[doc = "or `ComplexF64`. A new planner can be created by calling the zero-argument"]
+        #[doc = "constructor. The aliases `FftPlanner32` and `FftPlanner64` are also available."]
+        struct FftPlanner<T>;
+
+        #[doc = "    rustfft_plan_fft_forward!(planner::FftPlanner{T}, len::UInt)"]
+        #[doc = ""]
+        #[doc = "Plan a forward FFT for `Vector{T}` data of length `len`. If the planner is"]
+        #[doc = "already tracked `JlrsCore.BorrowError` is thrown."]
+        in FftPlanner<T> fn plan_fft_forward(&mut self, len: usize) -> TypedValueRet<FftInstance<T>> as rustfft_plan_fft_forward!;
+
+        #[doc = "    rustfft_plan_fft_forward_untracked!(planner::FftPlanner{T}, len::UInt)"]
+        #[doc = ""]
+        #[doc = "Plan a forward FFT for `Vector{T}` data of length `len` without tracking the planner."]
+        #[untracked_self]
+        in FftPlanner<T> fn plan_fft_forward(&mut self, len: usize) -> TypedValueRet<FftInstance<T>> as rustfft_plan_fft_forward_untracked!;
+
+        #[doc = "    rustfft_plan_fft_inverse!(planner::FftPlanner{T}, len::UInt)"]
+        #[doc = ""]
+        #[doc = "Plan an inverse FFT for `Vector{T}` data of length `len`. If the planner is"]
+        #[doc = "already tracked `JlrsCore.BorrowError` is thrown."]
+        in FftPlanner<T> fn plan_fft_inverse(&mut self, len: usize) -> TypedValueRet<FftInstance<T>> as rustfft_plan_fft_inverse!;
+
+        #[doc = "    rustfft_plan_fft_inverse_untracked!(planner::FftPlanner{T}, len::UInt)"]
+        #[doc = ""]
+        #[doc = "Plan an inverse FFT for `Vector{T}` data of length `len` without tracking the planner."]
+        #[untracked_self]
+        in FftPlanner<T> fn plan_fft_inverse(&mut self, len: usize) -> TypedValueRet<FftInstance<T>> as rustfft_plan_fft_inverse_untracked!;
+
+        #[doc = "    FftInstance{T}"]
+        #[doc = ""]
+        #[doc = "An instance of a plan to compute an FFT in some direction."]
+        struct FftInstance<T>;
+
+        #[doc = "    rustfft_plan_size(instance::FftInstance{T})"]
+        #[doc = ""]
+        #[doc = "The length of the vector that can be transformed with `plan`."]
+        #[untracked_self]
+        in FftInstance<T> fn len(&self) -> usize as rustfft_plan_size;
+
+        #[doc = "    rustfft_fft!(instance::FftInstance{T}, buffer::Vector{T})"]
+        #[doc = ""]
+        #[doc = "Computes the planned FFT if `buffer` in-place. If the array is already tracked"]
+        #[doc = "or the length is incompatible `JlrsCore.JlrsError` is thrown."]
+        #[untracked_self]
+        in FftInstance<T> fn process(&self, buffer: TypedRankedArray<T, 1>) -> JlrsResult<()> as rustfft_fft!;
+
+        #[doc = "    rustfft_fft_gcsafe!(instance::FftInstance{T}, buffer::Vector{T})"]
+        #[doc = ""]
+        #[doc = "Computes the planned FFT if `buffer` in-place. If `buffer` is already tracked"]
+        #[doc = "or its length is incompatible `JlrsCore.JlrsError` is thrown. The GC is allowed"]
+        #[doc = "to collect while this function is called."]
+        #[untracked_self]
+        #[gc_safe]
+        in FftInstance<T> fn process(&self, buffer: TypedRankedArray<T, 1>) -> JlrsResult<()> as rustfft_fft_gcsafe!;
+
+        #[doc = "    rustfft_fft_untracked!(instance::FftInstance{T}, buffer::Vector{T})"]
+        #[doc = ""]
+        #[doc = "Computes the planned FFT if `buffer` in-place. If the length of `buffer` is"]
+        #[doc = "incompatible `JlrsCore.JlrsError` is thrown."]
+        #[untracked_self]
+        in FftInstance<T> fn process_untracked(&self, buffer: TypedRankedArray<T, 1>) -> JlrsResult<()> as rustfft_fft_untracked!;
+
+        #[doc = "    rustfft_fft_untracked_gcsafe!(instance::FftInstance{T}, buffer::Vector{T})"]
+        #[doc = ""]
+        #[doc = "Computes the planned FFT if `buffer` in-place. If the length of `buffer` is"]
+        #[doc = "incompatible `JlrsCore.JlrsError` is thrown. The GC is allowed to collect while"]
+        #[doc = "this function is called."]
+        #[untracked_self]
+        #[gc_safe]
+        in FftInstance<T> fn process_untracked(&self, buffer: TypedRankedArray<T, 1>) -> JlrsResult<()> as rustfft_fft_untracked_gcsafe!;
+
+        #[doc = "    rustfft_fft_unchecked!(instance::FftInstance{T}, buffer::Vector{T})"]
+        #[doc = ""]
+        #[doc = "Computes the planned FFT if `buffer` in-place."]
+        #[untracked_self]
+        in FftInstance<T> fn process_unchecked(&self, buffer: TypedRankedArray<T, 1>) as rustfft_fft_unchecked!;
+
+        #[doc = "    rustfft_fft_unchecked_gcsafe!(instance::FftInstance{T}, buffer::Vector{T})"]
+        #[doc = ""]
+        #[doc = "Computes the planned FFT if `buffer` in-place. The GC is allowed to collect"]
+        #[doc = "while this function is called."]
+        #[untracked_self]
+        #[gc_safe]
+        in FftInstance<T> fn process_unchecked(&self, buffer: TypedRankedArray<T, 1>) as rustfft_fft_unchecked_gcsafe!;
+    };
+
+    type FftPlanner32 = FftPlanner<JuliaComplex<f32>>;
+
     #[doc = "    FftPlanner32"]
     #[doc = ""]
-    #[doc = "A planner for forward and inverse FFTs of `Vector{Complex{Float32}}` data. A new planner can"]
-    #[doc = "be created by calling the zero-argument constructor."]
-    struct FftPlanner32;
-    in FftPlanner32 fn new() -> TypedValueRet<FftPlanner32> as FftPlanner32;
+    #[doc = "A planner for single-precision complex data."]
+    in FftPlanner<JuliaComplex<f32>> fn new() -> TypedValueRet<FftPlanner<JuliaComplex<f32>>> as FftPlanner32;
 
-    #[doc= "    rustfft_plan_fft_forward(planner, len::UInt)"]
-    #[doc= ""]
-    #[doc = "Plan a forward FFT of length `len`. Returns either an `FftInstance32` or `FftInstance64`"]
-    #[doc = "depending on the provided planner, which must be either an `FftPlanner32` or "]
-    #[doc = "`FftPlanner64`."]
-    in FftPlanner32 fn plan_fft_forward(&mut self, len: usize) -> TypedValueRet<FftInstance<f32>> as rustfft_plan_fft_forward!;
-
-    #[doc = "    rustfft_plan_fft_inverse(planner, len::UInt)"]
-    #[doc = ""]
-    #[doc = "Plan an inverse FFT of length `len`. Returns either an `FftInstance32` or `FftInstance64`"]
-    #[doc = "depending on the provided planner, which must be either an `FftPlanner32` or "]
-    #[doc = "`FftPlanner64`."]
-    in FftPlanner32 fn plan_fft_inverse(&mut self, len: usize) -> TypedValueRet<FftInstance<f32>> as rustfft_plan_fft_inverse!;
-
-    #[doc= "    rustfft_plan_fft(planner, direction::Symbol, len::UInt)"]
-    #[doc= ""]
-    #[doc = "Plan either a forward or an inverse FFT of length `len`. Returns either an `FftInstance32` or"]
-    #[doc = "`FftInstance64` depending on the provided planner, which must be either an `FftPlanner32` or"]
-    #[doc = "`FftPlanner64`. The direction must be either `:forward` or `:inverse`"]
-    in FftPlanner32 fn plan_fft(
-        &mut self,
-        direction: Symbol,
-        len: usize
-    ) -> JlrsResult<TypedValueRet<FftInstance<f32>>> as rustfft_plan_fft!;
-
-    #[doc = "    FftInstance32"]
-    #[doc = ""]
-    #[doc = "A planned FFT instance that can compute either forward or inverse FFTs of"]
-    #[doc = "`Vector{Complex{Float32}}` data whose length is an integer multiple of the planned length."]
-    struct FftInstance32;
-
-    #[doc = "    rustfft_fft!(instance, data)"]
-    #[doc = ""]
-    #[doc = "Computes the forward or inverse FFT of the data in-place. `instance` must be either a"]
-    #[doc = "`FftInstance32` or a `FftInstance64`. `data` must be either a `Vector{Complex{Float32}}` or"]
-    #[doc = "a `Vector{Complex{Float64}}`, the width must match the that of the provided `instance`, its"]
-    #[doc = "length must be an integer multiple the length of the `instance`."]
-    #[untracked_self]
-    in FftInstance32 fn process(
-        &self,
-        buffer: TypedRankedArray<JuliaComplex<f32>, 1>
-    ) -> JlrsResult<()> as rustfft_fft!;
-
-    #[doc = "    rustfft_fft_untracked!(instance, data)"]
-    #[doc = ""]
-    #[doc = "Computes the forward or inverse FFT of the data in-place. `instance` must be either a"]
-    #[doc = "`FftInstance32` or a `FftInstance64`. `data` must be either a `Vector{Complex{Float32}}` or"]
-    #[doc = "a `Vector{Complex{Float64}}`, the width must match the that of the provided `instance`, its"]
-    #[doc = "length must be an integer multiple the length of the `instance`."]
-    #[untracked_self]
-    in FftInstance32 fn process_untracked(
-        &self,
-        buffer: TypedRankedArray<JuliaComplex<f32>, 1>
-    ) -> JlrsResult<()> as rustfft_fft_untracked!;
-
-
-    #[doc = "    rustfft_fft_unchecked!(instance, data)"]
-    #[doc = ""]
-    #[doc = "Computes the forward or inverse FFT of the data in-place. `instance` must be either a"]
-    #[doc = "`FftInstance32` or a `FftInstance64`. `data` must be either a `Vector{Complex{Float32}}` or"]
-    #[doc = "a `Vector{Complex{Float64}}`, the width must match the that of the provided `instance`, its"]
-    #[doc = "length must be an integer multiple the length of the `instance`."]
-    #[untracked_self]
-    in FftInstance32 fn process_unchecked(
-        &self,
-        buffer: TypedRankedArray<JuliaComplex<f32>, 1>
-    ) as rustfft_fft_unchecked!;
-
-    #[untracked_self]
-    #[gc_safe]
-    in FftInstance32 fn process(
-        &self,
-        buffer: TypedRankedArray<JuliaComplex<f32>, 1>
-    ) -> JlrsResult<()> as rustfft_fft_gc_safe!;
-
-    #[untracked_self]
-    #[gc_safe]
-    in FftInstance32 fn process_untracked(
-        &self,
-        buffer: TypedRankedArray<JuliaComplex<f32>, 1>
-    ) -> JlrsResult<()> as rustfft_fft_untracked_gc_safe!;
-
-    #[untracked_self]
-    #[gc_safe]
-    in FftInstance32 fn process_unchecked(
-        &self,
-        buffer: TypedRankedArray<JuliaComplex<f32>, 1>
-    ) as rustfft_fft_unchecked_gc_safe!;
-
+    type FftPlanner64 = FftPlanner<JuliaComplex<f64>>;
     #[doc = "    FftPlanner64"]
     #[doc = ""]
-    #[doc = "A planner for forward and inverse FFTs of `Vector{Complex{Float64}}` data. A new planner can"]
-    #[doc = "be created by calling the zero-argument constructor."]
-    struct FftPlanner64;
-    in FftPlanner64 fn new() -> TypedValueRet<FftPlanner64> as FftPlanner64;
-
-    in FftPlanner64 fn plan_fft_forward(&mut self, len: usize) -> TypedValueRet<FftInstance<f64>> as rustfft_plan_fft_forward!;
-    in FftPlanner64 fn plan_fft_inverse(&mut self, len: usize) -> TypedValueRet<FftInstance<f64>> as rustfft_plan_fft_inverse!;
-
-    in FftPlanner64 fn plan_fft(
-        &mut self,
-        direction: Symbol,
-        len: usize
-    ) -> JlrsResult<TypedValueRet<FftInstance<f64>>> as rustfft_plan_fft!;
-
-
-    #[doc = "    FftInstance64"]
-    #[doc = ""]
-    #[doc = "A planned FFT instance that can compute either forward or inverse FFTs of "]
-    #[doc = "`Vector{Complex{Float64}}` data whose length is an integer multiple of the planned length."]
-    struct FftInstance64;
-
-    #[untracked_self]
-    in FftInstance64 fn process(
-        &self,
-        buffer: TypedRankedArray<JuliaComplex<f64>, 1>
-    ) -> JlrsResult<()> as rustfft_fft!;
-
-    #[untracked_self]
-    in FftInstance64 fn process_untracked(
-        &self,
-        buffer: TypedRankedArray<JuliaComplex<f64>, 1>
-    ) -> JlrsResult<()> as rustfft_fft_untracked!;
-
-    #[untracked_self]
-    in FftInstance64 fn process_unchecked(
-        &self,
-        buffer: TypedRankedArray<JuliaComplex<f64>, 1>
-    ) as rustfft_fft_unchecked!;
-
-    #[untracked_self]
-    #[gc_safe]
-    in FftInstance64 fn process(
-        &self,
-        buffer: TypedRankedArray<JuliaComplex<f64>, 1>
-    ) -> JlrsResult<()> as rustfft_fft_gc_safe!;
-
-    #[untracked_self]
-    #[gc_safe]
-    in FftInstance64 fn process_untracked(
-        &self,
-        buffer: TypedRankedArray<JuliaComplex<f64>, 1>
-    ) -> JlrsResult<()> as rustfft_fft_untracked_gc_safe!;
-
-    #[untracked_self]
-    #[gc_safe]
-    in FftInstance64 fn process_unchecked(
-        &self,
-        buffer: TypedRankedArray<JuliaComplex<f64>, 1>
-    ) as rustfft_fft_unchecked_gc_safe!;
+    #[doc = "A planner for double-precision complex data."]
+    in FftPlanner<JuliaComplex<f64>> fn new() -> TypedValueRet<FftPlanner<JuliaComplex<f64>>> as FftPlanner64;
 }

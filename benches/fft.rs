@@ -9,7 +9,7 @@ use pprof::{
 };
 
 #[cfg(feature = "rt")]
-use rustfft_jl::{FftInstance32, FftInstance64, FftPlanner32, FftPlanner64, JuliaComplex};
+use rustfft_jl::{FftInstance, FftPlanner, JuliaComplex};
 
 #[cfg(feature = "rt")]
 #[inline(never)]
@@ -21,14 +21,14 @@ fn bench_forward_fft64(frame: &mut GcFrame, c: &mut Criterion) {
     ] {
         frame
             .scope(|mut frame| unsafe {
-                let mut planner = FftPlanner64::new().root(&mut frame);
+                let mut planner = FftPlanner::<JuliaComplex<f64>>::new().root(&mut frame);
                 let instance = planner
                     .track_exclusive()
                     .unwrap()
                     .plan_fft_forward(sz)
                     .root(&mut frame)
                     .data_ptr()
-                    .cast::<FftInstance64>()
+                    .cast::<FftInstance<JuliaComplex<f64>>>()
                     .as_ref();
 
                 let array = Value::eval_string(&mut frame, format!("ones(ComplexF64, {sz})"))
@@ -57,14 +57,14 @@ fn bench_forward_fft32(frame: &mut GcFrame, c: &mut Criterion) {
     ] {
         frame
             .scope(|mut frame| unsafe {
-                let mut planner = FftPlanner32::new().root(&mut frame);
+                let mut planner = FftPlanner::<JuliaComplex<f32>>::new().root(&mut frame);
                 let instance = planner
                     .track_exclusive()
                     .unwrap()
                     .plan_fft_forward(sz)
                     .root(&mut frame)
                     .data_ptr()
-                    .cast::<FftInstance32>()
+                    .cast::<FftInstance<JuliaComplex<f32>>>()
                     .as_ref();
 
                 let array = Value::eval_string(&mut frame, format!("ones(ComplexF32, {sz})"))
@@ -92,6 +92,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
         julia
             .scope(|mut frame| {
+                // Manually call the init function so all exported types are initialized.
                 rustfft_jl::rustfft_jl_init(Module::main(&frame), 1);
                 bench_forward_fft64(&mut frame, c);
                 bench_forward_fft32(&mut frame, c);
@@ -119,3 +120,6 @@ criterion_group! {
 
 #[cfg(feature = "rt")]
 criterion_main!(fft);
+
+#[cfg(not(feature = "rt"))]
+fn main() {}
