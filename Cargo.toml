@@ -44,7 +44,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 rustfft = "6"
-jlrs = { version = "0.19", features = ["ccall", "jlrs-derive", "uv"] }
+jlrs = { version = "0.19", features = ["ccall", "jlrs-derive"] }
 
 [target.'cfg(unix)'.dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
