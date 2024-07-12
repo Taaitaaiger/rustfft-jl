@@ -1,6 +1,6 @@
 [package]
 name = "rustfft-jl"
-version = "0.5.0"
+version = "0.6.0"
 edition = "2021"
 authors = ["Thomas van Doornmalen <thomas.vandoornmalen@gmail.com>"]
 description = "Julia binding library for RustFFT"
@@ -46,7 +46,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 rustfft = "6"
-jlrs = { git = "https://github.com/Taaitaaiger/jlrs.git", branch = "master", features = ["ccall", "complex"] }
+jlrs = { version = "0.21", features = ["ccall", "complex"] }
 
 [target.'cfg(unix)'.dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
