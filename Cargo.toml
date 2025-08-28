@@ -1,27 +1,15 @@
 [package]
 name = "rustfft-jl"
 version = "0.6.0"
-edition = "2021"
+edition = "2024"
 authors = ["Thomas van Doornmalen <thomas.vandoornmalen@gmail.com>"]
 description = "Julia binding library for RustFFT"
 homepage = "https://github.com/Taaitaaiger/rustfft-jl"
 repository = "https://github.com/Taaitaaiger/rustfft-jl"
 license = "MIT"
-rust-version = "1.77"
+rust-version = "1.85"
 
 [features]
-# Because this library depends on jlrs it must declare the version of Julia it's compatible with
-# by enabling a version feature. These features are "reexported", requiring one to be set at build
-# time. For example, to compile a library that's compatible with Julia 1.8, use
-# `cargo build --features=julia-1-8`.
-julia-1-6 = ["jlrs/julia-1-6"]
-julia-1-7 = ["jlrs/julia-1-7"]
-julia-1-8 = ["jlrs/julia-1-8"]
-julia-1-9 = ["jlrs/julia-1-9"]
-julia-1-10 = ["jlrs/julia-1-10"]
-julia-1-11 = ["jlrs/julia-1-11"]
-julia-1-12 = ["jlrs/julia-1-12"]
-
 # This library can be compiled with BinaryBuilder. The recipe can be found here:
 # https://github.com/JuliaPackaging/Yggdrasil/tree/master/R/rustfft/build_tarballs.jl
 #
@@ -46,11 +34,11 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 rustfft = "6"
-jlrs = { version = "0.21", features = ["ccall", "complex"] }
+jlrs = { git = "https://github.com/Taaitaaiger/jlrs", rev = "81a3858a4a7bc7947e8e9a63568d7d1760b2c805", version = "0.22", features = ["ccall", "complex", "jlrs-derive"] }
 
 [target.'cfg(unix)'.dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-pprof = { version = "0.13", features = ["flamegraph", "criterion"] }
+pprof = { version = "0.14", features = ["flamegraph", "criterion"] }
 
 [profile.release]
 panic = "abort"
