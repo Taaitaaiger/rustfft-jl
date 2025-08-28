@@ -16,16 +16,13 @@
 use std::sync::Arc;
 
 use jlrs::{
+    convert::into_julia::IntoJulia,
     data::{
-        layout::{complex::Complex, valid_layout::ValidField},
+        layout::{complex::Complex, is_bits::IsBits, valid_layout::ValidField},
         managed::{ccall_ref::CCallRefRet, value::typed::TypedValue},
-        types::{
-            construct_type::ConstructType,
-            foreign_type::{ParametricBase, ParametricVariant},
-        },
+        types::construct_type::ConstructType,
     },
     error::JlrsError,
-    impl_type_parameters, impl_variant_parameters,
     prelude::*,
     weak_handle_unchecked,
 };
@@ -45,7 +42,7 @@ unsafe extern "C" fn _Unwind_Resume() {}
 
 // RustFFT uses the floating-point number type as a generic, in Julia we want the full type. This
 // trait connects the complex number type to its inner type.
-pub trait IsComplex: 'static + Send + Sync {
+pub trait IsComplex: 'static + Send + Sync + Clone {
     type Inner: FftNum;
 }
 
@@ -54,24 +51,14 @@ impl<T: FftNum> IsComplex for Complex<T> {
 }
 
 /// Wrapper around `FftPlanner` from RustFFT.
+#[derive(OpaqueType)]
+#[jlrs(key = "FftPlanner<Complex<f32>>")]
 pub struct FftPlanner<T: IsComplex>(FftPlannerImp<T::Inner>);
-
-unsafe impl<T: IsComplex> ParametricBase for FftPlanner<T> {
-    type Key = FftPlanner<Complex<f32>>;
-    impl_type_parameters!('T');
-}
-
-unsafe impl<T> ParametricVariant for FftPlanner<T>
-where
-    T: IsComplex + ConstructType,
-{
-    impl_variant_parameters!(T);
-}
 
 impl<T: IsComplex> FftPlanner<T>
 where
-    Self: ParametricVariant,
-    FftInstance<T>: ParametricVariant,
+    Self: ConstructType + IntoJulia,
+    FftInstance<T>: ConstructType + IntoJulia,
 {
     /// Creates a new instance of `FftPlanner`,
     #[inline]
@@ -106,24 +93,14 @@ where
     }
 }
 
+#[derive(OpaqueType)]
+#[jlrs(key = "FftInstance<Complex<f32>>")]
 pub struct FftInstance<T: IsComplex>(Arc<dyn Fft<T::Inner>>);
-unsafe impl<T: IsComplex> ParametricBase for FftInstance<T> {
-    type Key = FftInstance<Complex<f32>>;
-    impl_type_parameters!('T');
-}
-
-unsafe impl<T> ParametricVariant for FftInstance<T>
-where
-    T: IsComplex + ConstructType,
-{
-    impl_variant_parameters!(T);
-}
 
 impl<T> FftInstance<T>
 where
-    T: IsComplex + Clone,
-    T::Inner: jlrs::data::layout::is_bits::IsBits + ConstructType + ValidField,
-    Self: ParametricVariant,
+    T: IsComplex,
+    T::Inner: IsBits + ConstructType + ValidField,
 {
     /// Returns the length required by this instance.
     #[inline]
@@ -146,21 +123,23 @@ where
 
         // Access the array as a mutable slice and convert its type to the compatible
         // `num_complex::Complex`.
-        let mut slice = tracked_buffer.bits_data_mut();
-        let slice = slice.as_mut_slice();
+        unsafe {
+            let mut slice = tracked_buffer.bits_data_mut();
+            let slice = slice.as_mut_slice();
 
-        // https://docs.rs/rustfft/6.1.0/src/rustfft/lib.rs.html#183
-        // This method panics if:
-        // - `buffer.len() % self.len() > 0`
-        // - `buffer.len() < self.len()`
-        let len = slice.len();
-        let fft_len = self.len();
-        if len < fft_len || len % fft_len > 0 {
-            Err(JlrsError::exception("Invalid length"))?;
+            // https://docs.rs/rustfft/6.1.0/src/rustfft/lib.rs.html#183
+            // This method panics if:
+            // - `buffer.len() % self.len() > 0`
+            // - `buffer.len() < self.len()`
+            let len = slice.len();
+            let fft_len = self.len();
+            if len < fft_len || len % fft_len > 0 {
+                Err(JlrsError::exception("Invalid length"))?;
+            }
+
+            // Transform the slice to its (inverse) FFT
+            self.0.process(slice);
         }
-
-        // Transform the slice to its (inverse) FFT
-        self.0.process(slice);
 
         // Success!
         Ok(())
@@ -177,21 +156,23 @@ where
         &self,
         mut buffer: TypedVector<Complex<T::Inner>>,
     ) -> JlrsResult<()> {
-        let mut accessor = buffer.bits_data_mut();
-        let slice = accessor.as_mut_slice();
+        unsafe {
+            let mut accessor = buffer.bits_data_mut();
+            let slice = accessor.as_mut_slice();
 
-        // https://docs.rs/rustfft/6.1.0/src/rustfft/lib.rs.html#183
-        // This method panics if:
-        // - `buffer.len() % self.len() > 0`
-        // - `buffer.len() < self.len()`
-        let len = slice.len();
-        let fft_len = self.len();
-        if len < fft_len || len % fft_len > 0 {
-            Err(JlrsError::exception("Invalid length"))?;
+            // https://docs.rs/rustfft/6.1.0/src/rustfft/lib.rs.html#183
+            // This method panics if:
+            // - `buffer.len() % self.len() > 0`
+            // - `buffer.len() < self.len()`
+            let len = slice.len();
+            let fft_len = self.len();
+            if len < fft_len || len % fft_len > 0 {
+                Err(JlrsError::exception("Invalid length"))?;
+            }
+
+            // Transform the slice to its (inverse) FFT
+            self.0.process(slice);
         }
-
-        // Transform the slice to its (inverse) FFT
-        self.0.process(slice);
 
         // Success!
         Ok(())
@@ -205,9 +186,11 @@ where
     /// another thread while this function is called. The buffer is not tracked.
     #[inline]
     pub unsafe fn process_unchecked(&self, mut buffer: TypedVector<Complex<T::Inner>>) {
-        let mut accessor = buffer.bits_data_mut();
-        let slice = accessor.as_mut_slice();
-        self.0.process(slice);
+        unsafe {
+            let mut accessor = buffer.bits_data_mut();
+            let slice = accessor.as_mut_slice();
+            self.0.process(slice);
+        }
     }
 }
 
