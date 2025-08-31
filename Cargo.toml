@@ -10,15 +10,6 @@ license = "MIT"
 rust-version = "1.85"
 
 [features]
-# This library can be compiled with BinaryBuilder. The recipe can be found here:
-# https://github.com/JuliaPackaging/Yggdrasil/tree/master/R/rustfft/build_tarballs.jl
-#
-# This recipe does two things to build this library:
-#
-# 1. determine the version feature that needs to be enabled
-# 2. build the library with the yggdrasil feature and version feature from step 1
-yggdrasil = ["jlrs/yggdrasil"]
-
 # Setting these flags is required when cross-compiling from other platforms. When BinaryBuilder is
 # used, only the yggdrasil feature needs to be enabled.
 i686 = ["jlrs/i686"]
@@ -34,7 +25,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 rustfft = "6"
-jlrs = { git = "https://github.com/Taaitaaiger/jlrs", rev = "81a3858a4a7bc7947e8e9a63568d7d1760b2c805", version = "0.22", features = ["ccall", "complex", "jlrs-derive"] }
+jlrs = { git = "https://github.com/Taaitaaiger/jlrs", rev = "bbc8886", version = "0.22", features = ["ccall", "complex", "jlrs-derive"] }
 
 [target.'cfg(unix)'.dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
