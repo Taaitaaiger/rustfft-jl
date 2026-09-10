@@ -37,7 +37,7 @@ use rustfft::{Fft, FftNum, FftPlanner as FftPlannerImp};
 /// This function will never be called because this library is always compiled with `panic=abort`.
 #[cfg(all(target_arch = "x86", target_os = "windows", target_env = "gnu"))]
 #[allow(unused)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 unsafe extern "C" fn _Unwind_Resume() {}
 
 // RustFFT uses the floating-point number type as a generic, in Julia we want the full type. This
