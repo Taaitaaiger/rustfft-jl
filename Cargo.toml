@@ -1,13 +1,13 @@
 [package]
 name = "rustfft-jl"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 authors = ["Thomas van Doornmalen <thomas.vandoornmalen@gmail.com>"]
 description = "Julia binding library for RustFFT"
 homepage = "https://github.com/Taaitaaiger/rustfft-jl"
 repository = "https://github.com/Taaitaaiger/rustfft-jl"
 license = "MIT"
-rust-version = "1.85"
+rust-version = "1.97"
 
 [features]
 # Setting these flags is required when cross-compiling from other platforms. When BinaryBuilder is
@@ -25,7 +25,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 rustfft = "6"
-jlrs = { version = "0.22", features = ["ccall", "complex", "jlrs-derive"] }
+jlrs = { version = "0.24", features = ["ccall", "complex", "jlrs-derive"] }
 
 [target.'cfg(unix)'.dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
